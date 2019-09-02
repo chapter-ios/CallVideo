@@ -115,7 +115,7 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
     private WifiManager wifiManager;
     private LoginResponse loginResponse;
     private String token;
-    private String userName;
+    private String userName, myName;
     private TextureView textureView;
     private int bWidth;
     private int bHeight;
@@ -177,12 +177,28 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
         Bundle extras = getIntent().getExtras();
         if (extras != null){
             token = extras.getString("myToken");
-            userName = extras.getString("myUsername");
+            myName = extras.getString("myName");
+            username = extras.getString("userName");
         }
 //        setTimedHandler();
 
         IntentFilter intentFilter = new IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION);
         registerReceiver(wifiStateReceiver, intentFilter);
+    }
+
+    public void makeCall(final int sendBandwidth){
+
+        btn_call.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent intent = new Intent(MainActivity.this, ActivityVideoChat.class);
+                intent.putExtra("bandwidth", sendBandwidth);
+                intent.putExtra("userName", username);
+                intent.putExtra("myName", myName);
+                intent.putExtra("myToken", token);
+                startActivity(intent);
+            }
+        });
     }
 
     private void showFinishingError(String title, String message) {
@@ -253,19 +269,6 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
         if (kurentoRoomAPI.isWebSocketConnected()) {
             kurentoRoomAPI.sendJoinRoom(this.username, this.roomname, true, roomId);
         }
-    }
-
-    public void makeCall(final int sendBandwidth){
-
-            btn_call.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    Intent intent = new Intent(MainActivity.this, ActivityVideoChat.class);
-                    intent.putExtra("bandwidth", sendBandwidth);
-                    intent.putExtra(Constants.USER_NAME, username);
-                    startActivity(intent);
-                }
-            });
     }
 
     private void permission(){

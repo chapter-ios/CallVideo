@@ -43,7 +43,7 @@
     <string name="waiting_remote_stream">Waiting remote stream...</string>
     <string name="register">Register</string>
     <string name="user_name">Name</string>
-    <string name="user_personal_id">Personal Id</string>
+    <string name="user_personal_id">User Name</string>
     <string name="user_phone">Phone Number</string>
     <string name="user_password">Password</string>
 </resources>

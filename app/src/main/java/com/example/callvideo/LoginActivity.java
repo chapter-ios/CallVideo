@@ -54,7 +54,7 @@ import retrofit2.Response;
 public class LoginActivity extends AppCompatActivity {
 
     private Button bt_login;
-    private EditText et_name, et_password;
+    private EditText et_name, et_password, et_personalId;
     private RetrofitClient retrofitClient;
     private OcbcNispService ocbcNispService;
 
@@ -66,6 +66,7 @@ public class LoginActivity extends AppCompatActivity {
         bt_login = findViewById(R.id.bt_login);
         et_name = findViewById(R.id.et_name);
         et_password = findViewById(R.id.et_password);
+        et_personalId = findViewById(R.id.personal_id);
 
         bt_login.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -73,7 +74,7 @@ public class LoginActivity extends AppCompatActivity {
                 if (et_name.getText().toString().isEmpty()){
                     Toast.makeText(LoginActivity.this, "Field Cannot be Empty", Toast.LENGTH_SHORT).show();
                 }else {
-                    requestLogin(et_name.getText().toString() ,  et_password.getText().toString());
+                    requestLogin(et_name.getText().toString() ,  et_password.getText().toString(), et_personalId.getText().toString());
                 }
             }
         });
@@ -83,7 +84,7 @@ public class LoginActivity extends AppCompatActivity {
 
     }
 
-    private void requestLogin(final String name, String password){
+    private void requestLogin(final String name, String password, final String userName){
         Call<LoginResponse> call = ocbcNispService.postLogin(name, password);
         call.enqueue(new Callback<LoginResponse>() {
             @Override
@@ -94,7 +95,8 @@ public class LoginActivity extends AppCompatActivity {
                             if (loginResponse.getSuccess().contains("true") || loginResponse.getSuccess().contains("false")){
                             Intent intent = new Intent(LoginActivity.this, MainActivity.class);
                             intent.putExtra("myToken", loginResponse.getToken());
-                            intent.putExtra("myUsername", name);
+                            intent.putExtra("myName", name);
+                            intent.putExtra("userName", userName);
                             startActivity(intent);
                         } else {
                             Toast.makeText(LoginActivity.this, loginResponse.getMessage(), Toast.LENGTH_SHORT).show();

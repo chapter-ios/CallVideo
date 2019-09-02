@@ -100,6 +100,7 @@ private static final String TAG = "SessionDescription";
     private int publishVideoRequestId;
     private TextView mCallStatus;
     private String  username;
+    private String myUserName, myToken;
     private boolean backPressed = false;
     private String customerId = "customer";
 
@@ -162,6 +163,8 @@ private static final String TAG = "SessionDescription";
         Bundle extras = getIntent().getExtras();
         this.username = extras.getString(Constants.USER_NAME, "");
         bandwidth = extras.getInt("bandwidth");
+        myUserName = extras.getString("userName");
+        myToken = extras.getString("myToken");
 
         rootEglBase = EglBase.create();
         masterView.init(rootEglBase.getEglBaseContext(), null);
@@ -576,7 +579,7 @@ private static final String TAG = "SessionDescription";
             obj.put("id", id);
             obj.put("customerId", customerId);
             obj.put("channel", channel);
-            obj.put("token", Constants.PUBLIC_TOKEN);
+            obj.put("token", token);
             obj.put("sdpOffer", sessionDescription);
             obj.put("maxBandwidth", checkConnection());
 
