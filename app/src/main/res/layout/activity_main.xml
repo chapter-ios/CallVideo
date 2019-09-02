@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context=".MainActivity">
+
+    <TextureView
+        android:id="@+id/view_finder"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:visibility="gone"
+        />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        >
+
+        <TextView
+            android:id="@+id/main_username"
+            android:text="Kevin"
+            android:layout_centerInParent="true"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="25sp"
+            android:visibility="gone"
+            />
+
+        <View
+            android:layout_alignParentBottom="true"
+            android:layout_width="match_parent"
+            android:layout_height="3dp" />
+
+    </RelativeLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding  ="16dp"
+        android:orientation="horizontal">
+
+        <RelativeLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <Button
+                android:id="@+id/btn_call"
+                android:layout_centerInParent="true"
+                android:layout_height="60dp"
+                android:layout_width ="2000dp"
+                android:scaleType="fitCenter"
+                android:padding="2dp"
+                android:text="@string/button_start_videocall"
+                />
+
+            <!--
+            <ImageButton
+                android:background="@drawable/round_button_send"
+                android:src="@drawable/ic_action_call"
+                android:layout_centerInParent="true"
+                android:layout_height="50dp"
+                android:layout_width ="50dp"
+                android:scaleType="fitCenter"
+                android:padding="8dp"
+                android:onClick="makeCall"/>
+                -->
+        </RelativeLayout>
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding  ="16dp"
+        android:visibility="gone"
+        android:orientation="horizontal">
+
+        <EditText
+            android:id="@+id/main_text_message"
+            android:hint="Type message"
+            android:inputType="textShortMessage"
+            android:maxLines="1"
+            android:layout_width="20dp"
+            android:layout_height="match_parent"
+            android:layout_weight="2"/>
+
+        <RelativeLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <Button
+                android:layout_centerInParent="true"
+                android:layout_height="60dp"
+                android:layout_width ="2000dp"
+                android:scaleType="fitCenter"
+                android:padding="2dp"
+                android:text="button_send_message"
+                />
+        </RelativeLayout>
+
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        />
+
+    <TextView
+        android:text="button_send_message"
+        android:textSize="25sp"
+        android:gravity="left"
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:layout_margin="10dp"
+
+        android:id="@+id/message_textview" />
+
+    <ListView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:id="@android:id/list"
+        android:visibility="gone">
+    </ListView>
+
+
+
+</LinearLayout>
