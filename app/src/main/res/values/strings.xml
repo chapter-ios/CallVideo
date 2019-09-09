@@ -35,7 +35,7 @@
     <string name="button_connect">Connect</string>
     <string name="button_join_room">Join room</string>
     <string name="button_send_message">Send message</string>
-    <string name="button_start_videocall">Start videocall</string>
+    <string name="button_start_videocall">Call</string>
     <string name="button_disconnect">Disconnect</string>
     <string name="button_ok">OK</string>
     <string name="button_cancel">Cancel</string>
@@ -46,4 +46,18 @@
     <string name="user_personal_id">User Name</string>
     <string name="user_phone">Phone Number</string>
     <string name="user_password">Password</string>
+    <string name="kyc_video_call_ocbc">KYC Video Call OCBC</string>
+    <string name="call_text">To continue verification process \n please dial the call button below</string>
+
+    <string name="please_wait">Please Wait...</string>
+    <string name="please_wait_text">we\'re finding an agent\n for you in 1 minute</string>
+
+    <string name="poor_network_signal_text">Poor network connection detected.\nPlease check your connectivity</string>
+    <string name="poor_network_signal">Poor Network Signal</string>
+
+    <string name="reconnecting_title">Whoops!</string>
+    <string name="reconneting_text">Reconnecting</string>
+
+    <string name="success_reconnecting_title">Yeah!</string>
+    <string name="success_reconnecting_text">You have succesfully connected</string>
 </resources>

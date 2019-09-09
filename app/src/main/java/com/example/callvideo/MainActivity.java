@@ -1,12 +1,6 @@
 package com.example.callvideo;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.camera.core.CameraX;
-import androidx.camera.core.ImageCapture;
-import androidx.camera.core.ImageCaptureConfig;
-import androidx.camera.core.Preview;
-import androidx.camera.core.PreviewConfig;
-import androidx.lifecycle.LifecycleOwner;
 
 import android.Manifest;
 import android.annotation.TargetApi;
@@ -33,13 +27,15 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.Rational;
 import android.util.Size;
+import android.view.Display;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.TextureView;
 import android.view.View;
-import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -82,7 +78,7 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
 
     private static final String FCONNECTION = "facebookconnection";
     private static final String CHECKSPEED = "checkspeedconnection";
-    private String username, roomname;
+    private String username, roomname, callingName;
     private String TAG = "MainActivity";
     private LooperExecutor executor;
     private static KurentoRoomAPI kurentoRoomAPI;
@@ -92,9 +88,6 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
     private String wsUri;
     public static Map<String, Boolean> userPublishList = new HashMap<>();
     Handler mHandler;
-    int sum = 0;
-    int avg;
-
     long startTime;
     long endTime;
     long fileSize;
@@ -110,17 +103,21 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
     private ConnectionQuality mConnectionClass;
     private ConnectionClassManager mConnectionClassManager;
     private DeviceBandwidthSampler mDeviceBandwidthSampler;
+
     private int mTries;
     private ConnectionQuality connectionQuality;
     private WifiManager wifiManager;
     private LoginResponse loginResponse;
-    private String token;
+    private String token, spToken, spName, spCallingName;
     private String userName, myName;
     private TextureView textureView;
-    private int bWidth;
-    private int bHeight;
-    private int sendBandwidth;
     private Button btn_call;
+    private TextView tv_low_connection;
+    private ImageView iv_low_connection, signal_indicator;
+    private SpeedDownload speedDownload;
+    private ProgressBar loading_calling;
+    private SharedPreferences myPreferences;
+    private SharedPreferences.Editor editor;
 
 
     @Override
@@ -131,6 +128,12 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
         this.mUsernameTV = (TextView) findViewById(R.id.main_username);
         this.mTextMessageTV = (TextView) findViewById(R.id.message_textview);
         this.mTextMessageET = (EditText) findViewById(R.id.main_text_message);
+
+        iv_low_connection = findViewById(R.id.iv_low_signal);
+        tv_low_connection = findViewById(R.id.tv_low_signal);
+        signal_indicator = findViewById(R.id.signal_indicator);
+        loading_calling = findViewById(R.id.loading_calling);
+
         textureView = findViewById(R.id.view_finder);
         btn_call = findViewById(R.id.btn_call);
 
@@ -144,29 +147,28 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
         kurentoRoomAPI = new KurentoRoomAPI(executor, wsUri, this);
         mHandler = new Handler();
         permission();
-        this.username     = mSharedPreferences.getString(Constants.USER_NAME, "");
+        this.username  = mSharedPreferences.getString(Constants.USER_NAME, "");
         this.roomname     = mSharedPreferences.getString(Constants.ROOM_NAME, "");
-//        Log.i(TAG, "username: "+this.username);
-//        Log.i(TAG, "roomname: "+this.roomname);
 
         mConnectionClassManager = ConnectionClassManager.getInstance();
         mDeviceBandwidthSampler = DeviceBandwidthSampler.getInstance();
-//        mConnectionClassManager.register(mListener);
-        connectionQuality = ConnectionClassManager.getInstance().getCurrentBandwidthQuality();
 
+        connectionQuality = ConnectionClassManager.getInstance().getCurrentBandwidthQuality();
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
 
-        // Load test certificate from assets
+        myPreferences = getSharedPreferences("saveDataLogin", Context.MODE_PRIVATE);
+
         setTimedHandler();
-        getKbps();
-//        checkConnection();
+        checkConnection();
+        makeCall();
+
 
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        cameraResolution();
+//        cameraResolution();
 
         if (!kurentoRoomAPI.isWebSocketConnected()) {
             this.mUsernameTV.setText(getString(R.string.room_connecting, username, roomname));
@@ -176,27 +178,65 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
 
         Bundle extras = getIntent().getExtras();
         if (extras != null){
-            token = extras.getString("myToken");
-            myName = extras.getString("myName");
-            username = extras.getString("userName");
+            token = extras.getString(Constants.LOGINN_TOKEN);
+            myName = extras.getString(Constants.MY_NAME);
+            callingName = extras.getString(Constants.CALLING_NAME);
         }
+
+        spToken = myPreferences.getString("spToken", null);
+        spName = myPreferences.getString("spName", null);
+        spCallingName = myPreferences.getString("spCallingName", null);
+
+        Log.d("HASIL_LOGIN", "myName = " + spName +"\ncalling Name = " + spCallingName +"\nTOKEN = " + spToken + "\n:v");
 //        setTimedHandler();
 
         IntentFilter intentFilter = new IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION);
         registerReceiver(wifiStateReceiver, intentFilter);
     }
 
-    public void makeCall(final int sendBandwidth){
-
+    public void makeCall(){
         btn_call.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Intent intent = new Intent(MainActivity.this, ActivityVideoChat.class);
-                intent.putExtra("bandwidth", sendBandwidth);
-                intent.putExtra("userName", username);
-                intent.putExtra("myName", myName);
-                intent.putExtra("myToken", token);
-                startActivity(intent);
+                loading_calling.setVisibility(View.VISIBLE);
+                checkKbps(new SpeedDownload() {
+                    @Override
+                    public void onSuccess(int speed) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                loading_calling.setVisibility(View.GONE);
+                            }
+                        });
+
+                        Log.d("speedConnection", " spoeed " + speed);
+                        if (speed < 100) {
+                            Log.d("speedConnection", " spoeed low");
+                            Intent intent = new Intent(MainActivity.this, PoorConnectionActivity.class);
+                            startActivity(intent);
+
+                        } else {
+                            Log.d("speedConnection", " spoeed high");
+                            Intent intent = new Intent(MainActivity.this, ActivityVideoChat.class);
+                            intent.putExtra(Constants.CALLING_NAME, username);
+                            intent.putExtra(Constants.MY_NAME, myName);
+                            intent.putExtra(Constants.LOGINN_TOKEN, token);
+                            startActivity(intent);
+                        }
+                    }
+
+                    @Override
+                    public void onFailure() {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                loading_calling.setVisibility(View.GONE);
+                                Toast.makeText(MainActivity.this,
+                                        "Cannot connect, Please check your connection", Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    }
+                });
             }
         });
     }
@@ -272,7 +312,6 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
     }
 
     private void permission(){
-
         Dexter.withActivity(MainActivity.this)
                 .withPermissions(
                         Manifest.permission.CALL_PHONE,
@@ -439,14 +478,15 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
 
             ConnectivityManager cm =
                     (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+//        NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
 
-        if (activeNetwork.getType() == ConnectivityManager.TYPE_WIFI) {
 
-        } else if (activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE){
-            Log.d(FCONNECTION, "listener ");
-
-        }
+//        if (activeNetwork.getType() == ConnectivityManager.TYPE_WIFI) {
+//
+//        } else if (activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE){
+//            Log.d(FCONNECTION, "listener ");
+//
+//        }
 
             switch (wifiStateExtra) {
                 case WifiManager.WIFI_STATE_ENABLED:
@@ -458,53 +498,30 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
         }
     };
 
-
-
-    private void setTimedHandler(){
-//        int begin = 0;
-//        int timeInterval = 1000;
-//        final Timer timer = new Timer();
+//    private void cameraResolution(){
+//        Point displaySize = new Point();
+//        getWindowManager().getDefaultDisplay().getRealSize(displaySize);
 //
-//        TimerTask timerTask = new TimerTask() {
-//            int counter = 0;
-//            @Override
-//            public void run() {
-//                    sum = sum + checkKbps();
-//                Log.d("check average " , " average " + sum );
-//                if (counter++ >=10){
-//                    timer.cancel();
-//                }
-//            }
-//        };
-//        Log.d("check avg ",  " avg " + sum / 10);
+//        DisplayMetrics metrics = new DisplayMetrics();
 //
-//        timer.schedule(timerTask, begin, timeInterval);
-    }
-
-    private void cameraResolution(){
-        Point displaySize = new Point();
-        getWindowManager().getDefaultDisplay().getRealSize(displaySize);
-
-        DisplayMetrics displayMetrics = new DisplayMetrics();
-
-
-        bHeight = displaySize.y / 8;
-        bWidth = displaySize.x / 5;
-
-        Rational aspectRatio = new Rational(textureView.getWidth(), textureView.getHeight());
-        Size screen = new Size(textureView.getWidth(), textureView.getHeight()); //size of the screen
-
-        Log.d("check camera nya", "checkcamera " + displaySize.x + " dan " + displaySize.y);
-        Log.d("check camera nya", "checkcamera 2 " + bWidth + " dan " + bHeight);
-        PreviewConfig pConfig = new PreviewConfig.Builder().setTargetAspectRatio(aspectRatio).setTargetResolution(screen).build();
-        Preview preview = new Preview(pConfig);
-        ImageCaptureConfig imageCaptureConfig = new ImageCaptureConfig.Builder().setCaptureMode(ImageCapture.CaptureMode.MIN_LATENCY)
-                .setTargetRotation(getWindowManager().getDefaultDisplay().getRotation()).build();
-        final ImageCapture imgCap = new ImageCapture(imageCaptureConfig);
-
-
-
-    }
+//        Display display = getWindowManager().getDefaultDisplay();
+//        Point size = new Point();
+//        display.getSize(size);
+//        int width = size.x;
+//        int height = size.y;
+//
+//        Rational aspectRatio = new Rational(textureView.getWidth(), textureView.getHeight());
+//        Size screen = new Size(textureView.getWidth(), textureView.getHeight()); //size of the screen
+//
+//        Log.d("check camera nya", "checkcamera " + width + " dan " + height);
+//
+//        PreviewConfig pConfig = new PreviewConfig.Builder().setTargetAspectRatio(aspectRatio).setTargetResolution(screen).build();
+//        Preview preview = new Preview(pConfig);
+//        ImageCaptureConfig imageCaptureConfig = new ImageCaptureConfig.Builder().setCaptureMode(ImageCapture.CaptureMode.MIN_LATENCY)
+//                .setTargetRotation(getWindowManager().getDefaultDisplay().getRotation()).build();
+//        final ImageCapture imgCap = new ImageCapture(imageCaptureConfig);
+//
+//    }
 
     @TargetApi(Build.VERSION_CODES.M)
     private int checkConnection(){
@@ -516,30 +533,43 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
 //        boolean isConnected = activeNetwork != null &&
 //                activeNetwork.isConnectedOrConnecting();
 
-        boolean isWifi = activeNetwork.getType() == ConnectivityManager.TYPE_WIFI;
-        boolean isHP = activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE;
-
-        //should check null because in airplane mode it will be null
         ConnectivityManager connectivityManager = (ConnectivityManager)this.getSystemService(CONNECTIVITY_SERVICE);
-        NetworkCapabilities nc = connectivityManager.getNetworkCapabilities(connectivityManager.getActiveNetwork());
-        int downSpeed = nc.getLinkDownstreamBandwidthKbps();
-        int upSpeed = nc.getLinkUpstreamBandwidthKbps();
+        NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
+        if (networkInfo == null ) {
+            Log.d("cacacacacac", "no connection");
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    iv_low_connection.setVisibility(View.VISIBLE);
+                    tv_low_connection.setVisibility(View.VISIBLE);
+                    signal_indicator.setImageResource(R.drawable.poor_connection);
+                }
+            });
 
-        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-        int numberOfLevels = 5;
-        WifiInfo wifiInfo = wifiManager.getConnectionInfo();
-        int level = WifiManager.calculateSignalLevel(wifiInfo.getRssi(), numberOfLevels);
+        } else {
+            boolean isWifi = activeNetwork.getType() == ConnectivityManager.TYPE_WIFI;
+            boolean isHP = activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE;
 
-        if (isHP){
-            speedLevel = switchConnection(downSpeed);
-        } else if (isWifi){
-            switchCase(level, wifiInfo, downSpeed);
+            //should check null because in airplane mode it will be null
+
+            NetworkCapabilities nc = connectivityManager.getNetworkCapabilities(connectivityManager.getActiveNetwork());
+            int downSpeed = nc.getLinkDownstreamBandwidthKbps();
+            int upSpeed = nc.getLinkUpstreamBandwidthKbps();
+
+            WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            int numberOfLevels = 5;
+            WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+            int level = WifiManager.calculateSignalLevel(wifiInfo.getRssi(), numberOfLevels);
+
+            if (isHP){
+                speedLevel = switchConnection(downSpeed);
+            } else if (isWifi){
+                switchCase(level, wifiInfo, downSpeed);
+            }
+
+
         }
-
-        makeCall(sendBandwidth);
-
         return speedLevel;
-
     }
 
     private int switchConnection(int something){
@@ -607,7 +637,7 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
         return speedLevel;
     }
 
-    private int checkKbps(){
+    private int checkKbps(final SpeedDownload speedDownload){
         Request request = new Request.Builder()
                 .url("http://139.180.134.73/img/250K.txt")
                 .build();
@@ -617,6 +647,7 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
             @Override
             public void onFailure(@NotNull Call call, @NotNull IOException e) {
                 Log.d("checkKbps", e.toString());
+                speedDownload.onFailure();
             }
 
             @Override
@@ -649,33 +680,77 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
                 double timeTakenSecs = timeTakenMills / 1000;  // divide by 1000 to get time in seconds
                 divideKbps = (int) Math.round(1024 / timeTakenSecs);
 
+                speedDownload.onSuccess(divideKbps);
                 if(divideKbps <= POOR_BANDWIDTH){
                     // slow connection
                 }
 //                 get the download speed by dividing the file size by time taken to download
 //                double speed = fileSize / timeTakenMills;
 
-//                Log.d(CHECKSPEED, "Time taken in secs: " + timeTakenSecs);
-//                Log.d(CHECKSPEED, "File size: " + fileSize);
             }
         });
 
         return divideKbps;
     }
 
-    private int getKbps (){
-        Log.d("getKbps ", "getKbps 2 " + checkKbps());
-        for (int i = 0; i < 10; i++){
-            sum = sum + checkKbps();
+        private void setTimedHandler(){
+        int begin = 0;
+        int timeInterval = 5000;
+        final Timer timer = new Timer();
 
-        }
-        Log.d("getKbps ", "getKbps 2 " + sum);
-        return sum;
+        TimerTask timerTask = new TimerTask() {
+            @Override
+            public void run() {
+                checkKbps(new SpeedDownload() {
+                    @Override
+                    public void onSuccess(final int speed) {
+                        Log.d("munculkanspeed", "speed " + speed);
+
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (speed < 100){
+                                    iv_low_connection.setVisibility(View.VISIBLE);
+                                    tv_low_connection.setVisibility(View.VISIBLE);
+                                    signal_indicator.setImageResource(R.drawable.poor_connection);
+                                } else {
+                                    iv_low_connection.setVisibility(View.GONE);
+                                    tv_low_connection.setVisibility(View.GONE);
+                                    signal_indicator.setImageResource(R.drawable.good_connection);
+                                }
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onFailure() {
+                        checkConnection();
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                iv_low_connection.setVisibility(View.VISIBLE);
+                                tv_low_connection.setVisibility(View.VISIBLE);
+                                signal_indicator.setImageResource(R.drawable.poor_connection);
+                            }
+                        });
+                    }
+                });
+
+            }
+        };
+        timer.schedule(timerTask, begin, timeInterval);
     }
+
+    public interface SpeedDownload {
+        void onSuccess(int speed);
+        void onFailure();
+    }
+
+
+
 }
 
-
-//    private void facebookConnectionClass(){
+//        private void facebookConnectionClass(){
 //        OkHttpClient client = new OkHttpClient();
 //        Request request = new Request.Builder()
 //                .url("http://139.180.134.73/img/spinner.gif")
@@ -733,6 +808,8 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
 //        });
 //    }
 //}
+
+
 //
 //    public void sendTextMessage(View view){
 //        String message=mTextMessageET.getText().toString();
@@ -750,3 +827,4 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
 //            Toast.makeText(MainActivity.this, "no message", Toast.LENGTH_SHORT).show();
 //        }
 //    }
+

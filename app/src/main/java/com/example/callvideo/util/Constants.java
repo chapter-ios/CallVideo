@@ -50,6 +50,11 @@ public class Constants {
     public static String ADDRESS_OCBS = "f2f.ocbcnisp.com";
     public static String SOCKET_ADDRESS_HTTPS = "139.180.134.73";
     public static final String ROOM_NAME    = "fi.vtt.nubotest.SHARED_PREFS.ROOM_NAME";
-    public static final String PUBLIC_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaWF0IjoxNTY3MTM3Mzc2LCJleHAiOjE1NjcxODA1NzZ9.rsSoGYcV4Gkx3wOgx1cAZb45OQuSDdwn9KzgKE-6Hp0";
+    public static final String PUBLIC_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaWF0IjoxNTY3NzYzNzEzLCJleHAiOjE1Njc4MDY5MTN9.-7kUBVJIobXQx7C3GvHNqzLS2QV1QIwP5_KcyGPQsfU";
+    public static final String SPrefs = "mySharedPreferences";
     public static int id    = 0;
+
+    public static final String MY_NAME = "myName";
+    public static final String CALLING_NAME = "customerId";
+    public static final String LOGINN_TOKEN = "token";
 }

@@ -1,13 +1,11 @@
 package com.example.callvideo;
 
 import android.annotation.TargetApi;
-import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Camera;
-import android.graphics.Color;
+import android.content.SharedPreferences;
+import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
-import android.hardware.camera2.CameraManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
@@ -16,15 +14,20 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.SystemClock;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.callvideo.util.Constants;
 import com.google.gson.JsonObject;
@@ -51,7 +54,6 @@ import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Timer;
-import java.util.TimerTask;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
@@ -76,10 +78,10 @@ import io.socket.emitter.Emitter;
 import io.socket.engineio.client.Transport;
 import okhttp3.OkHttpClient;
 
-public class ActivityVideoChat extends Activity implements NBMWebRTCPeer.Observer, RoomListener {
+public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPeer.Observer, RoomListener {
 
 //    private static final String TAG = "ActivityVideoChat";
-private static final String TAG = "SessionDescription";
+    private static final String TAG = "SessionDescription";
     private static final String SDP = "SessionDescription";
     private static final String ICEICE = "icecandidate";
     private static final String RECONNECT = "reconnecting";
@@ -98,32 +100,26 @@ private static final String TAG = "SessionDescription";
 
     private Map<Integer, String> videoRequestUserMapping;
     private int publishVideoRequestId;
-    private TextView mCallStatus;
+    private TextView mCallStatus, title_process, text_process;
+    private ProgressBar pb_barr;
+    private ImageView image_process;
+    private LinearLayout ll_processing;
     private String  username;
-    private String myUserName, myToken;
+    private String myUserName, myToken, myCustomerId;
     private boolean backPressed = false;
     private String customerId = "customer";
 
     private Handler mHandler = null;
     private CallState callState;
     private String mSessionDescription = "";
-    private String token;
+    private String token, spToken, spCallingName;
     private EglBase rootEglBase;
     private Button stopVideo;
-
-    private long timeUnformatted = 0L;
-    private long timeInMilliseconds = 0L;
-    private long timeSwapBuff = 0L;
-    private long updatedTime = 0L;
-    private int SetLevel= 0;
-    private int bWidth;
-    private int bHeight;
-    private int bandwidth;
-
+    private ImageButton  change_camera;
+    private SharedPreferences myPreferences;
     private enum CallState{
         IDLE, PUBLISHING, PUBLISHED, WAITING_REMOTE_USER, RECEIVING_REMOTE_USER
     }
-
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -131,10 +127,20 @@ private static final String TAG = "SessionDescription";
         connectServer();
         setContentView(R.layout.activity_video_chat);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
         mHandler = new Handler();
         masterView = findViewById(R.id.gl_surface);
         localView = findViewById(R.id.gl_surface_local);
         stopVideo = findViewById(R.id.stopVideo);
+        ll_processing = findViewById(R.id.ll_processing);
+        image_process = findViewById(R.id.image_process);
+        title_process = findViewById(R.id.title_process);
+        text_process = findViewById(R.id.text_process);
+        pb_barr = findViewById(R.id.pb_barr);
+        change_camera = findViewById(R.id.imageButton2);
+
+
+
         this.mCallStatus = findViewById(R.id.call_status);
         callState = CallState.IDLE;
         MainActivity.getKurentoRoomAPIInstance().addObserver(this);
@@ -145,10 +151,11 @@ private static final String TAG = "SessionDescription";
         stopVideo.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Toast.makeText(ActivityVideoChat.this, "Stopper", Toast.LENGTH_SHORT).show();
+                Toast.makeText(ActivityVideoChat.this, "Stop Calling", Toast.LENGTH_SHORT).show();
                 Intent intent = new Intent(ActivityVideoChat.this, MainActivity.class);
                 startActivity(intent);
                 endCall();
+                stopSocketIO();
                 socketIO.disconnect();
             }
         });
@@ -159,19 +166,20 @@ private static final String TAG = "SessionDescription";
     @Override
     protected void onStart() {
         super.onStart();
-
+        RendererCommon.ScalingType scalingType = RendererCommon.ScalingType.SCALE_ASPECT_FILL;
+        myPreferences = getSharedPreferences("saveDataLogin", Context.MODE_PRIVATE);
         Bundle extras = getIntent().getExtras();
         this.username = extras.getString(Constants.USER_NAME, "");
-        bandwidth = extras.getInt("bandwidth");
-        myUserName = extras.getString("userName");
-        myToken = extras.getString("myToken");
+
+        spToken = myPreferences.getString("spToken", null);
+        spCallingName = myPreferences.getString("spName", null);
+
+        myCustomerId = extras.getString(Constants.CALLING_NAME);
+        myToken = extras.getString(Constants.LOGINN_TOKEN);
 
         rootEglBase = EglBase.create();
         masterView.init(rootEglBase.getEglBaseContext(), null);
         masterView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL);
-
-
-
 
         localView.init(rootEglBase.getEglBaseContext(), null);
         localView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL);
@@ -180,17 +188,18 @@ private static final String TAG = "SessionDescription";
          peerConnectionParameters = new NBMMediaConfiguration(
                 NBMMediaConfiguration.NBMRendererType.OPENGLES,
                 NBMMediaConfiguration.NBMAudioCodec.OPUS, 0,
-                NBMMediaConfiguration.NBMVideoCodec.VP8, checkConnection(),
-                new NBMMediaConfiguration.NBMVideoFormat(1080, 2246, PixelFormat.RGB_888, 4),
+                NBMMediaConfiguration.NBMVideoCodec.VP8, 700,
+                new NBMMediaConfiguration.NBMVideoFormat(1280, 720, PixelFormat.RGB_888 , 30),
                 NBMMediaConfiguration.NBMCameraPosition.FRONT);
 //        setNbmWebRTCPeer();
+//        ImageFormat.YUV_420_888 or PixelFormat.RGB_888
 
         videoRequestUserMapping = new HashMap<>();
 
         nbmWebRTCPeer = new NBMWebRTCPeer(peerConnectionParameters, this, localView, this);
         nbmWebRTCPeer.registerMasterRenderer(masterView);
-
         nbmWebRTCPeer.initialize();
+        changeCamera(nbmWebRTCPeer);
 
         callState = CallState.PUBLISHING;
 
@@ -198,36 +207,36 @@ private static final String TAG = "SessionDescription";
 
     @Override
     protected void onStop() {
-        Log.d(TESTCALL,"1");
+        Log.d(TESTCALL,"onStop");
         endCall();
         super.onStop();
     }
 
     @Override
     protected void onPause() {
-        Log.d(TESTCALL,"2");
-        if (nbmWebRTCPeer !=null){
-            nbmWebRTCPeer.stopLocalMedia();
-        }
+        Log.d(TESTCALL,"onPause ");
+//        if (nbmWebRTCPeer != null){
+//            nbmWebRTCPeer.stopLocalMedia();
+//        }
         super.onPause();
     }
 
     @Override
     protected void onResume() {
-        Log.d(TESTCALL,"3");
+        Log.d(TESTCALL,"onResume");
         super.onResume();
         nbmWebRTCPeer.startLocalMedia();
     }
 
     @Override
     protected void onDestroy() {
-        Log.d(TESTCALL,"4");
+        Log.d(TESTCALL,"onDestroy");
         super.onDestroy();
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        Log.d(TESTCALL,"5");
+        Log.d(TESTCALL,"onCreateOptionsMenu");
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_video_chat, menu);
         return true;
@@ -327,8 +336,13 @@ private static final String TAG = "SessionDescription";
         try
         {
             if (nbmWebRTCPeer != null) {
+                Log.d(TESTCALL, "end call 1");
+                nbmWebRTCPeer.stopLocalMedia();
                 nbmWebRTCPeer.close();
                 nbmWebRTCPeer = null;
+                Log.d(TESTCALL, "end call 2");
+
+
             }
         }
         catch (Exception e){e.printStackTrace();}
@@ -343,6 +357,8 @@ private static final String TAG = "SessionDescription";
     @Override
     public void onLocalSdpOfferGenerated(final SessionDescription sessionDescription, final NBMPeerConnection nbmPeerConnection) {
         publishVideoRequestId = ++Constants.id;
+        Log.d("JSONException", "exception " + sessionDescription);
+//        sendSocketParameter(mSessionDescription);
         Log.d(TESTCALL,"11");
         Log.d(RECONNECT, "reconnecting " + "onLocalSdpOfferGenerated");
         if (callState == CallState.PUBLISHING || callState == CallState.PUBLISHED) {
@@ -355,8 +371,8 @@ private static final String TAG = "SessionDescription";
         } else { // Asking for remote user video
             Log.d(SDP, "onLocalSdpOfferGenerated in else" + sessionDescription.description);
             mSessionDescription = sessionDescription.description;
-            sendSocketParameter(mSessionDescription);
             publishVideoRequestId = ++Constants.id;
+            sendSocketParameter(mSessionDescription);
             String username = nbmPeerConnection.getConnectionId();
             videoRequestUserMapping.put(publishVideoRequestId, username);
             MainActivity.getKurentoRoomAPIInstance().sendReceiveVideoFrom(username, "webcam", sessionDescription.description, publishVideoRequestId);
@@ -395,20 +411,23 @@ private static final String TAG = "SessionDescription";
 
         switch (iceConnectionState){
             case CONNECTED:
+                Log.d(CONNECTSERVER, "connected");
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        mCallStatus.setVisibility(View.VISIBLE);
-                        mCallStatus.setText("");
+                        showSuccess();
+
                     }
                 });
                 break;
             case DISCONNECTED:
+                Log.d(CONNECTSERVER, "disconnected");
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        mCallStatus.setVisibility(View.VISIBLE);
-                        mCallStatus.setText("Reconnecting");
+//                        mCallStatus.setVisibility(View.VISIBLE);
+//                        mCallStatus.setText("Reconnecting");
+                        showReconnecting();
                     }
                 });
                 break;
@@ -577,17 +596,18 @@ private static final String TAG = "SessionDescription";
         try {
             JSONObject obj = new JSONObject();
             obj.put("id", id);
-            obj.put("customerId", customerId);
+            obj.put("customerId", spCallingName);
             obj.put("channel", channel);
-            obj.put("token", token);
+            obj.put("token", spToken);
             obj.put("sdpOffer", sessionDescription);
-            obj.put("maxBandwidth", checkConnection());
+            obj.put("maxBandwidth", 700);
 
-            Log.d("cekcekcekcek", " video " + checkConnection());
+            Log.d("JSONException", "exception " + obj.toString());
 
             socketIO.emit("message", obj.toString());
 
         } catch (JSONException e) {
+            Log.d("JSONException", "exception " + e);
             e.printStackTrace();
         }
     }
@@ -695,21 +715,17 @@ private static final String TAG = "SessionDescription";
                         String data = (String) args[0];
                         JsonObject jsonObject = new JsonParser().parse(data).getAsJsonObject();
                         String theId = jsonObject.get("id").getAsString();
-                        Log.d(CONNECTSERVER, theId);
-                        Log.d(RECONNECT, "EVENT_MESSAGE");
 
                         switch (theId){
                             case "registerResponse":
-                                Log.d(CONNECTSERVER, "1");
+                                Log.d(CONNECTSERVER, "registerResponse");
                                 break;
                             case "waitingQueue":
-                                Log.d(CONNECTSERVER, "2");
-                                mCallStatus.setVisibility(View.VISIBLE);
-                                mCallStatus.setText("Connecting");
-                                mCallStatus.setTextColor(Color.WHITE);
+                                Log.d(CONNECTSERVER, "waitingQueue");
+                                showLoading();
                                 break;
                             case "iceCandidateCustomer":
-                                Log.d(CONNECTSERVER, "3");
+                                Log.d(CONNECTSERVER, "iceCandidateCustomer");
                                 JsonObject getCandidate = jsonObject.get("candidate").getAsJsonObject();
                                 String getSdp = getCandidate.get("candidate").getAsString();
                                 String getSdpMid = getCandidate.get("sdpMid").getAsString();
@@ -720,10 +736,7 @@ private static final String TAG = "SessionDescription";
                                 nbmWebRTCPeer.addRemoteIceCandidate(iceCandidate, "local");
                                 break;
                             case "callResponse":
-                                Log.d(CONNECTSERVER, "4");
-                                mCallStatus.setVisibility(View.VISIBLE);
-                                mCallStatus.setText("Yes");
-                                mCallStatus.setTextColor(Color.WHITE);
+                                Log.d(CONNECTSERVER, "callResponse");
                                 String getResponse = jsonObject.get("response").getAsString();
                                 String sdpAnswer = jsonObject.get("sdpAnswer").getAsString();
 
@@ -734,12 +747,12 @@ private static final String TAG = "SessionDescription";
                                 peerConnectionFactory.setVideoHwAccelerationOptions(rootEglBase.getEglBaseContext(), rootEglBase.getEglBaseContext());
                                 break;
                             case "stopByAgent":
-                                Log.d(CONNECTSERVER, "5");
-                                Toast.makeText(ActivityVideoChat.this, "Stopper", Toast.LENGTH_SHORT).show();
+                                Log.d(CONNECTSERVER, "stopByAgent");
+                                Toast.makeText(ActivityVideoChat.this, "Stop Calling", Toast.LENGTH_SHORT).show();
                                 Intent intent = new Intent(ActivityVideoChat.this, MainActivity.class);
                                 startActivity(intent);
                                 default:
-                                    Log.d("getMeIce", theId);
+                                    Log.d("getMeIce", "stop by agent " + theId);
                                     break;
                         }
                     }
@@ -768,8 +781,10 @@ private static final String TAG = "SessionDescription";
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        mCallStatus.setVisibility(View.VISIBLE);
-                        mCallStatus.setText("Reconnecting");
+//                        mCallStatus.setVisibility(View.VISIBLE);
+//                        mCallStatus.setText("Reconnecting");
+//
+//                       showReconnecting();
                     }
                 });
                 Log.d(RECONNECT, "EVENT_DISCONNECT");
@@ -811,13 +826,6 @@ private static final String TAG = "SessionDescription";
                     public void run() {
                         mCallStatus.setText("Reconnecting");
                         mCallStatus.setVisibility(View.VISIBLE);
-
-//                        mCallStatus.postDelayed(new Runnable() {
-//                            @Override
-//                            public void run() {
-//                                mCallStatus.setVisibility(View.GONE);
-//                            }
-//                        },3000);
                     }
                 });
 
@@ -845,25 +853,23 @@ private static final String TAG = "SessionDescription";
 
     }
 
-    private int setTimedHandler(){
-        SetLevel = 0;
-        final Handler timedHandler = new Handler();
-        Timer timer = new Timer();
-        TimerTask timerTask = new TimerTask() {
-            @Override
-            public void run() {
-                timedHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
+    private void stopSocketIO(){
+        try {
+            JSONObject obj = new JSONObject();
+            obj.put("id", "stopByCustomer");
+            obj.put("customerId", spCallingName);
+//            obj.put("customerId", customerId);
 
-                    }
-                });
-            }
-        };
-        timer.schedule(timerTask,0, 5000);
+            Log.d("JSONException", "stop calling " + obj.toString());
 
-        return SetLevel;
+            socketIO.emit("message", obj.toString());
+
+        } catch (JSONException e) {
+            Log.d("JSONException", "exception " + e);
+            e.printStackTrace();
+        }
     }
+
 
     @TargetApi(Build.VERSION_CODES.M)
     private int checkConnection(){
@@ -964,28 +970,52 @@ private static final String TAG = "SessionDescription";
         }
         return speedLevel;
     }
-}
 
-//    private NBMMediaConfiguration setNbmWebRTCPeer(){
-//        final Handler timedHandler = new Handler();
-//        Timer timer = new Timer();
-//        TimerTask timerTask = new TimerTask() {
-//            @Override
-//            public void run() {
-//                timedHandler.post(new Runnable() {
-//                    @Override
-//                    public void run() {
-//                        peerConnectionParameters = new NBMMediaConfiguration(
-//                                NBMMediaConfiguration.NBMRendererType.OPENGLES,
-//                                NBMMediaConfiguration.NBMAudioCodec.OPUS, 0,
-//                                NBMMediaConfiguration.NBMVideoCodec.VP8, checkConnection(),
-//                                new NBMMediaConfiguration.NBMVideoFormat(240, 320, PixelFormat.RGB_888, 4),
-//                                NBMMediaConfiguration.NBMCameraPosition.FRONT);
-//
-//                    }
-//                });
-//            }
-//        };
-//        timer.schedule(timerTask,0, 60000);
-//        return peerConnectionParameters;
-//    }
+    private void showSuccess(){
+        Handler mhandler = new Handler();
+        Timer t = new Timer(false);
+
+        ll_processing.setVisibility(View.VISIBLE);
+        image_process.setVisibility(View.VISIBLE);
+        pb_barr.setVisibility(View.GONE);
+
+        image_process.setImageResource(R.drawable.reconnected_icon);
+        title_process.setText(R.string.success_reconnecting_title);
+        text_process.setText(R.string.success_reconnecting_text);
+
+        mhandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+               ll_processing.setVisibility(View.GONE);
+            }
+        }, 2000);
+    }
+
+    private void showReconnecting(){
+
+        ll_processing.setVisibility(View.VISIBLE);
+        pb_barr.setVisibility(View.GONE);
+        image_process.setVisibility(View.VISIBLE);
+        image_process.setImageResource(R.drawable.low_signal);
+        title_process.setText(R.string.reconnecting_title);
+        text_process.setText(R.string.reconneting_text);
+    }
+
+    private void showLoading() {
+
+        ll_processing.setVisibility(View.VISIBLE);
+        pb_barr.setVisibility(View.VISIBLE);
+        text_process.setText(R.string.please_wait_text);
+        title_process.setText(R.string.please_wait);
+    }
+
+    private void changeCamera(final NBMWebRTCPeer nbmWebRTCPeer){
+        change_camera.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                nbmWebRTCPeer.switchCameraPosition();
+            }
+        });
+
+    }
+}
