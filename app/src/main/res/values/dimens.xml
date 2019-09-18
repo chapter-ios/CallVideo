@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="edit_text_width">250dp</dimen>
-    <dimen name="edit_text_height">35dp</dimen>
+    <dimen name="edit_text_height">50dp</dimen>
+    <dimen name="text_size_medium">25sp</dimen>
+    <dimen name="text_size_small">15sp</dimen>
 
+    <dimen name="padding_bottom">20dp</dimen>
+    <dimen name="padding_right">20dp</dimen>
+    <dimen name="padding_left">20dp</dimen>
+    <dimen name="padding_top">20dp</dimen>
+
+    <dimen name="button_height">60dp</dimen>
+    <dimen name="button_width">300dp</dimen>
+
+    <dimen name="text_view_size_medium">15sp</dimen>
+    <dimen name="text_view_size_big">20sp</dimen>
 </resources>

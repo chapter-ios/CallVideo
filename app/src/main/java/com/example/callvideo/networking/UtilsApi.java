@@ -8,6 +8,6 @@ public class UtilsApi {
 //public static  final String BASE_URL = "https://139.180.134.73/api/";
 
     public static OcbcNispService getAPIService(){
-        return RetrofitClient.getClient("http://" + Constants.SOCKET_ADDRESS_HTTPS).create(OcbcNispService.class);
+        return RetrofitClient.getClient("https://" + Constants.SOCKET_ADDRESS_HTTPS).create(OcbcNispService.class);
     }
 }

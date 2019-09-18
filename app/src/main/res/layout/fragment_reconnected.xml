@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/colorPrimaryDark"
+    >
+
+    <ImageView
+        android:src="@drawable/no_network"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Whoops!"
+        android:textSize="@dimen/text_size_medium"
+        android:layout_marginTop="@dimen/padding_top"
+        android:textColor="@color/whiteColor"
+        />
+
+    <TextView
+        android:textSize="@dimen/text_size_small"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Reconnecting"
+        android:textColor="@color/whiteColor"
+        android:layout_marginTop="@dimen/padding_top"
+        />
+
+</LinearLayout>

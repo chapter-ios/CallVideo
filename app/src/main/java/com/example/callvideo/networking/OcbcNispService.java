@@ -12,4 +12,8 @@ public interface OcbcNispService {
     @FormUrlEncoded
     @POST("api/login")
     Call<LoginResponse> postLogin(@Field("name") String name, @Field("password") String password);
+
+    @FormUrlEncoded
+    @POST("img/250K.txt")
+    Call<String> testDownload();
 }

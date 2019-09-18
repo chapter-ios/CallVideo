@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<RelativeLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     tools:context=".MainActivity">
+
+    <FrameLayout
+        android:id="@+id/fragment_main"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"/>
 
     <TextureView
         android:id="@+id/view_finder"
@@ -24,6 +28,43 @@
         android:layout_height="80dp"
         >
 
+        <LinearLayout
+            android:orientation="vertical"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            >
+
+            <ImageView
+                android:id="@+id/signal_indicator"
+                android:paddingTop="20dp"
+                android:paddingRight="20dp"
+                android:layout_gravity="center"
+                android:src="@drawable/poor_connection"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentRight="true"/>
+
+            <TextView
+                android:id="@+id/count_kbps"
+                android:gravity="center"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:layout_marginRight="20dp"
+                />
+
+        </LinearLayout>
+
+        <ImageView
+            android:paddingTop="20dp"
+            android:paddingLeft="20dp"
+            android:src="@drawable/ocbc_log"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+
+            />
+
         <TextView
             android:id="@+id/main_username"
             android:text="Kevin"
@@ -39,6 +80,7 @@
             android:layout_width="match_parent"
             android:layout_height="3dp" />
 
+
     </RelativeLayout>
 
     <LinearLayout
@@ -52,14 +94,93 @@
             android:layout_height="match_parent"
             android:layout_weight="1">
 
+            <LinearLayout
+                android:id="@+id/ll_video_call"
+                android:layout_marginTop="200dp"
+                android:orientation="vertical"
+                android:layout_centerHorizontal="true"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+                <ImageView
+                    android:src="@drawable/video_call"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="20dp"
+                    android:layout_gravity="center"
+                    />
+
+                <TextView
+                    android:id="@+id/judul"
+                    android:text="@string/kyc_video_call_ocbc"
+                    android:textColor="@color/redDefault"
+                    android:textStyle="bold"
+                    android:layout_gravity="center"
+                    android:textSize="@dimen/text_size_medium"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="15dp"
+                    />
+
+                <TextView
+                    android:textSize="@dimen/text_size_small"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="@string/call_text"/>
+
+                <Spinner
+                    android:id="@+id/spinner_video"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginTop="@dimen/padding_top"
+                    android:entries="@array/video_codec_type"
+                    >
+
+                </Spinner>
+
+                <ImageView
+                    android:id="@+id/iv_low_signal"
+                    android:src="@drawable/low_signal"
+                    android:layout_marginTop="50dp"
+                    android:layout_gravity="center"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone"
+                    />
+                <TextView
+                    android:id="@+id/tv_low_signal"
+                    android:text="low connection"
+                    android:layout_gravity="center"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone"
+                    />
+
+                <ProgressBar
+                    android:id="@+id/loading_calling"
+                    android:layout_gravity="center"
+                    android:paddingTop="@dimen/padding_top"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone"
+                    />
+
+            </LinearLayout>
+
             <Button
                 android:id="@+id/btn_call"
                 android:layout_centerInParent="true"
-                android:layout_height="60dp"
-                android:layout_width ="2000dp"
+                android:layout_height="@dimen/button_height"
+                android:layout_width ="@dimen/button_width"
                 android:scaleType="fitCenter"
                 android:padding="2dp"
                 android:text="@string/button_start_videocall"
+                android:layout_alignParentBottom="true"
+                android:layout_marginBottom="@dimen/edit_text_height"
+                android:background="@drawable/button_call"
+                android:textColor="#ffffff"
                 />
 
             <!--
@@ -115,15 +236,7 @@
         android:layout_height="3dp"
         />
 
-    <TextView
-        android:text="button_send_message"
-        android:textSize="25sp"
-        android:gravity="left"
-        android:layout_width="match_parent"
-        android:layout_height="150dp"
-        android:layout_margin="10dp"
 
-        android:id="@+id/message_textview" />
 
     <ListView
         android:layout_width="wrap_content"
@@ -134,4 +247,4 @@
 
 
 
-</LinearLayout>
+</RelativeLayout>

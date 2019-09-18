@@ -7,17 +7,17 @@ import java.io.Serializable;
 public class LoginResponse implements Serializable {
 
     @SerializedName("success")
-    public String success;
+    public Boolean success;
     @SerializedName("message")
     public String message;
     @SerializedName("token")
     public String token;
 
-    public String getSuccess() {
+    public Boolean getSuccess() {
         return success;
     }
 
-    public void setSuccess(String success) {
+    public void setSuccess(Boolean success) {
         this.success = success;
     }
 

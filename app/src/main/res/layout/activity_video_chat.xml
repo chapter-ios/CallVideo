@@ -7,9 +7,9 @@
     tools:context=".ActivityVideoChat">
 
     <FrameLayout
-        android:id="@+id/loading_fragment"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"/>
+        android:id="@+id/indicator_fragment"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"/>
 
     <org.webrtc.SurfaceViewRenderer
         android:id="@+id/gl_surface"
@@ -34,30 +34,105 @@
         android:textSize="25sp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignTop="@+id/imageButton2"
         android:layout_alignParentRight="true"
         android:visibility="gone"
         />
 
-    <ImageButton
+    <LinearLayout
+        android:layout_alignEnd="@+id/gl_surface"
+        android:orientation="horizontal"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="10dp"
-        android:onClick="hangup"
-        android:contentDescription="Hang up"
-        android:id="@+id/imageButton2"
-        android:visibility="gone"
-        />
+        android:layout_height="wrap_content">
+
+        <ImageButton
+            android:id="@+id/imageButton2"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignEnd="@+id/gl_surface"
+            android:layout_marginLeft="10dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginRight="10dp"
+            android:background="@drawable/switch_camera_button"
+            android:onClick="hangup" />
+
+        <ImageButton
+            android:id="@+id/audio_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignLeft="@+id/imageButton2"
+            android:layout_marginLeft="10dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginRight="10dp"
+            android:visibility="gone"
+            android:onClick="hangup" />
+
+        <TextView
+            android:id="@+id/tv_resolution"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:layout_marginTop="10dp"
+            android:layout_marginRight="10dp"
+            android:text=""
+            />
+
+    </LinearLayout>
 
     <Button
         android:id="@+id/stopVideo"
-        android:layout_width="wrap_content"
+        android:layout_width="250dp"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true"
         android:layout_marginBottom="25dp"
-        android:text="Stop"
+        android:background="@drawable/button_red_rounded"
+        android:text="End Call"
+        android:textColor="#ffff"
         />
+
+    <LinearLayout
+        android:id="@+id/ll_processing"
+        android:layout_centerInParent="true"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        >
+
+        <ProgressBar
+            android:id="@+id/pb_barr"
+            android:visibility="gone"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            />
+        <ImageView
+            android:id="@+id/image_process"
+            android:src="@drawable/reconnected"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            />
+
+        <TextView
+            android:id="@+id/title_process"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="@dimen/text_size_medium"
+            android:layout_marginTop="@dimen/padding_top"
+            android:textColor="@color/whiteColor"
+            />
+
+        <TextView
+            android:id="@+id/text_process"
+            android:textSize="@dimen/text_size_small"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="@color/whiteColor"
+            android:layout_marginTop="@dimen/padding_top"
+            />
+    </LinearLayout>
 
 
 </RelativeLayout>
