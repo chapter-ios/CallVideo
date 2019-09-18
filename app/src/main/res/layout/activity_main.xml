@@ -28,14 +28,33 @@
         android:layout_height="80dp"
         >
 
-        <ImageView
-            android:id="@+id/signal_indicator"
-            android:paddingTop="20dp"
-            android:paddingRight="20dp"
-            android:src="@drawable/good_connection"
+        <LinearLayout
+            android:orientation="vertical"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_alignParentRight="true"/>
+            android:layout_alignParentRight="true"
+            >
+
+            <ImageView
+                android:id="@+id/signal_indicator"
+                android:paddingTop="20dp"
+                android:paddingRight="20dp"
+                android:layout_gravity="center"
+                android:src="@drawable/poor_connection"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentRight="true"/>
+
+            <TextView
+                android:id="@+id/count_kbps"
+                android:gravity="center"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:layout_marginRight="20dp"
+                />
+
+        </LinearLayout>
 
         <ImageView
             android:paddingTop="20dp"
@@ -109,6 +128,17 @@
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
                     android:text="@string/call_text"/>
+
+                <Spinner
+                    android:id="@+id/spinner_video"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginTop="@dimen/padding_top"
+                    android:entries="@array/video_codec_type"
+                    >
+
+                </Spinner>
 
                 <ImageView
                     android:id="@+id/iv_low_signal"
@@ -206,14 +236,7 @@
         android:layout_height="3dp"
         />
 
-    <TextView
-        android:id="@+id/message_textview"
-        android:layout_width="match_parent"
-        android:layout_height="150dp"
-        android:gravity="left"
-        android:text="button_send_message"
-        android:visibility="gone"
-        android:textSize="25sp" />
+
 
     <ListView
         android:layout_width="wrap_content"

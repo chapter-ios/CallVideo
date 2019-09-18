@@ -49,12 +49,14 @@ public class Constants {
 //    public static String ADDRESS_OCBS = "wss://room.willab.fi:8443/room";
     public static String ADDRESS_OCBS = "f2f.ocbcnisp.com";
     public static String SOCKET_ADDRESS_HTTPS = "139.180.134.73";
+    public static String IP_LOCAL = "192.168.1.105";
     public static final String ROOM_NAME    = "fi.vtt.nubotest.SHARED_PREFS.ROOM_NAME";
-    public static final String PUBLIC_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaWF0IjoxNTY3NzYzNzEzLCJleHAiOjE1Njc4MDY5MTN9.-7kUBVJIobXQx7C3GvHNqzLS2QV1QIwP5_KcyGPQsfU";
+    public static final String PUBLIC_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbiI6dHJ1ZSwiaWF0IjoxNTY4MDEzNjM0LCJleHAiOjE1NjgwNTY4MzR9.hvfSdsZRrPGIjFdun_Xqv9LplS8u21GhbhHq_p6rPzg";
     public static final String SPrefs = "mySharedPreferences";
     public static int id    = 0;
 
     public static final String MY_NAME = "myName";
     public static final String CALLING_NAME = "customerId";
     public static final String LOGINN_TOKEN = "token";
+    public static final String SPEED_CON = "speed_connection";
 }

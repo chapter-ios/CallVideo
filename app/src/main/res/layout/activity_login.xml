@@ -24,6 +24,7 @@
         android:src="@drawable/ocbc_log"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+
         />
 
     <TextView
@@ -41,6 +42,7 @@
 
 
         <LinearLayout
+            android:layout_marginTop="@dimen/padding_top"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
@@ -136,5 +138,16 @@
             android:visibility="gone"
             />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/version_code"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textStyle="bold"
+        android:layout_alignParentBottom="true"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="20dp"
+        />
 
 </RelativeLayout>

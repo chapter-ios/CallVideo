@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
+import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
@@ -29,6 +30,7 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.callvideo.networking.RetrofitClient;
 import com.example.callvideo.util.Constants;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -38,29 +40,21 @@ import org.json.JSONObject;
 import org.webrtc.DataChannel;
 import org.webrtc.EglBase;
 import org.webrtc.IceCandidate;
+import org.webrtc.MediaConstraints;
 import org.webrtc.MediaStream;
 import org.webrtc.PeerConnection;
 import org.webrtc.PeerConnectionFactory;
 import org.webrtc.RendererCommon;
 import org.webrtc.SessionDescription;
 import org.webrtc.SurfaceViewRenderer;
+import org.webrtc.VideoCapturer;
 
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.X509Certificate;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Timer;
-
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 
 import fi.vtt.nubomedia.kurentoroomclientandroid.KurentoRoomAPI;
 import fi.vtt.nubomedia.kurentoroomclientandroid.RoomError;
@@ -81,7 +75,8 @@ import okhttp3.OkHttpClient;
 public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPeer.Observer, RoomListener {
 
 //    private static final String TAG = "ActivityVideoChat";
-    private static final String TAG = "SessionDescription";
+
+    private static final String TAG = ActivityVideoChat.class.getSimpleName();
     private static final String SDP = "SessionDescription";
     private static final String ICEICE = "icecandidate";
     private static final String RECONNECT = "reconnecting";
@@ -94,18 +89,18 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
     private LooperExecutor looperExecutor;
 
     private NBMWebRTCPeer nbmWebRTCPeer;
-    private NBMMediaConfiguration peerConnectionParameters;
+    private NBMMediaConfiguration nbmMediaConfiguration;
     private SurfaceViewRenderer masterView;
     private SurfaceViewRenderer localView;
 
     private Map<Integer, String> videoRequestUserMapping;
     private int publishVideoRequestId;
-    private TextView mCallStatus, title_process, text_process;
+    private TextView mCallStatus, title_process, text_process, tv_resolution;
     private ProgressBar pb_barr;
     private ImageView image_process;
     private LinearLayout ll_processing;
     private String  username;
-    private String myUserName, myToken, myCustomerId;
+    private String myUserName, myToken, myCustomerId, videoCodecFormat;
     private boolean backPressed = false;
     private String customerId = "customer";
 
@@ -115,8 +110,17 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
     private String token, spToken, spCallingName;
     private EglBase rootEglBase;
     private Button stopVideo;
-    private ImageButton  change_camera;
+    private ImageButton  change_camera, audio_button;
     private SharedPreferences myPreferences;
+    private SharedPreferences.Editor editor;
+    private AudioManager audioManager;
+    boolean speakerOn = true;
+    NBMMediaConfiguration.NBMVideoCodec seek;
+    private boolean hitOnce = false;
+    private int bandWidth, bandHeight, speedConndection;
+    NBMWebRTCPeer.NBMPeerConnectionParameters nbmPeerConnectionParameters;
+
+
     private enum CallState{
         IDLE, PUBLISHING, PUBLISHED, WAITING_REMOTE_USER, RECEIVING_REMOTE_USER
     }
@@ -138,8 +142,8 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
         text_process = findViewById(R.id.text_process);
         pb_barr = findViewById(R.id.pb_barr);
         change_camera = findViewById(R.id.imageButton2);
-
-
+        audio_button = findViewById(R.id.audio_button);
+        tv_resolution = findViewById(R.id.tv_resolution);
 
         this.mCallStatus = findViewById(R.id.call_status);
         callState = CallState.IDLE;
@@ -153,14 +157,14 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
             public void onClick(View view) {
                 Toast.makeText(ActivityVideoChat.this, "Stop Calling", Toast.LENGTH_SHORT).show();
                 Intent intent = new Intent(ActivityVideoChat.this, MainActivity.class);
+                stopVideoBundle();
                 startActivity(intent);
-                endCall();
-                stopSocketIO();
-                socketIO.disconnect();
+
             }
         });
 
         kurentoRoomAPI = new KurentoRoomAPI(looperExecutor, Constants.SOCKET_ADDRESS_HTTPS, ActivityVideoChat.this);
+
     }
 
     @Override
@@ -176,31 +180,53 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
 
         myCustomerId = extras.getString(Constants.CALLING_NAME);
         myToken = extras.getString(Constants.LOGINN_TOKEN);
+        videoCodecFormat = extras.getString("video_codec");
+        speedConndection = extras.getInt(Constants.SPEED_CON);
+        Log.d("munculkanspeed", "speed " + speedConndection);
 
         rootEglBase = EglBase.create();
-        masterView.init(rootEglBase.getEglBaseContext(), null);
-        masterView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL);
+        if (!hitOnce){
+            hitOnce = true;
+            editor = myPreferences.edit();
+            editor.putBoolean("hitOnce", true);
+            editor.apply();
 
-        localView.init(rootEglBase.getEglBaseContext(), null);
-        localView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL);
-        localView.setMirror(true);
+            masterView.init(rootEglBase.getEglBaseContext(), null);
+            masterView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_BALANCED);
+            masterView.setMirror(true);
 
-         peerConnectionParameters = new NBMMediaConfiguration(
-                NBMMediaConfiguration.NBMRendererType.OPENGLES,
-                NBMMediaConfiguration.NBMAudioCodec.OPUS, 0,
-                NBMMediaConfiguration.NBMVideoCodec.VP8, 700,
-                new NBMMediaConfiguration.NBMVideoFormat(1280, 720, PixelFormat.RGB_888 , 30),
-                NBMMediaConfiguration.NBMCameraPosition.FRONT);
-//        setNbmWebRTCPeer();
-//        ImageFormat.YUV_420_888 or PixelFormat.RGB_888
+            localView.init(rootEglBase.getEglBaseContext(), null);
+            localView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL);
+            localView.setEnabled(true );
+            localView.setZOrderMediaOverlay(true);
 
-        videoRequestUserMapping = new HashMap<>();
+            nbmPeerConnectionParameters = new NBMWebRTCPeer.NBMPeerConnectionParameters(
+                    true,true,
+                    bandWidth, bandHeight, 1, 100,
+                    "VP8", true, 0, "OPUS",
+                    false,false);
 
-        nbmWebRTCPeer = new NBMWebRTCPeer(peerConnectionParameters, this, localView, this);
-        nbmWebRTCPeer.registerMasterRenderer(masterView);
-        nbmWebRTCPeer.initialize();
+            nbmMediaConfiguration = new NBMMediaConfiguration(
+                    NBMMediaConfiguration.NBMRendererType.OPENGLES,
+                    NBMMediaConfiguration.NBMAudioCodec.OPUS, 0,
+                    NBMMediaConfiguration.NBMVideoCodec.VP8, 0,
+//                    new NBMMediaConfiguration.NBMVideoFormat(1280, 720, PixelFormat.RGBX_8888, 4),
+                    new NBMMediaConfiguration.NBMVideoFormat(bandWidth, bandHeight, PixelFormat.RGB_888, 1),
+                    NBMMediaConfiguration.NBMCameraPosition.FRONT);
+
+                videoRequestUserMapping = new HashMap<>();
+
+            nbmWebRTCPeer = new NBMWebRTCPeer(nbmMediaConfiguration, this, localView, this);
+            nbmWebRTCPeer.registerMasterRenderer(masterView);
+            nbmWebRTCPeer.initialize();
+        } else if (hitOnce) {
+
+        }
+
+
         changeCamera(nbmWebRTCPeer);
-
+        audioButton();
+//        videoCapturer = getVideoCapturer();
         callState = CallState.PUBLISHING;
 
     }
@@ -208,7 +234,8 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
     @Override
     protected void onStop() {
         Log.d(TESTCALL,"onStop");
-        endCall();
+//        endCall();
+//        moveTaskToBack(true);
         super.onStop();
     }
 
@@ -232,6 +259,7 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
     protected void onDestroy() {
         Log.d(TESTCALL,"onDestroy");
         super.onDestroy();
+        stopVideoBundle();
     }
 
     @Override
@@ -298,6 +326,7 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
                     } catch (InterruptedException e){ Log.d("VCA-oBP","Successfully interrupted"); }
                 }
             });
+            stopVideoBundle();
             this.backPressedThread.start();
         }
         // If button pressed the second time then call super back pressed
@@ -305,6 +334,7 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
         else {
             if (this.backPressedThread != null)
                 this.backPressedThread.interrupt();
+            stopVideoBundle();
             super.onBackPressed();
         }
     }
@@ -313,8 +343,19 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
         finish();
     }
 
+    private void stopVideoBundle(){
+        endCall();
+        stopSocketIO();
+        hitOnce = false;
+        moveTaskToBack(false);
+        socketIO.disconnect();
+        bandHeight = 0;
+        bandWidth = 0;
+    }
+
     private void GenerateOfferForRemote(String remote_name){
         nbmWebRTCPeer.generateOffer(remote_name, false);
+
         callState = CallState.WAITING_REMOTE_USER;
         runOnUiThread(new Runnable() {
             @Override
@@ -340,6 +381,7 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
                 nbmWebRTCPeer.stopLocalMedia();
                 nbmWebRTCPeer.close();
                 nbmWebRTCPeer = null;
+                masterView.release();
                 Log.d(TESTCALL, "end call 2");
 
 
@@ -352,49 +394,45 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
     public void onInitialize() {
         Log.d(TESTCALL,"112");
         nbmWebRTCPeer.generateOffer("local", true);
+
     }
 
     @Override
     public void onLocalSdpOfferGenerated(final SessionDescription sessionDescription, final NBMPeerConnection nbmPeerConnection) {
         publishVideoRequestId = ++Constants.id;
-        Log.d("JSONException", "exception " + sessionDescription);
 //        sendSocketParameter(mSessionDescription);
         Log.d(TESTCALL,"11");
-        Log.d(RECONNECT, "reconnecting " + "onLocalSdpOfferGenerated");
         if (callState == CallState.PUBLISHING || callState == CallState.PUBLISHED) {
-            Log.d(SDP, "onLocalSdpOfferGenerated in if" + sessionDescription.description);
+            Log.d(SDP, "onLocalSdpOfferGenerated in if " + sessionDescription.description);
             mSessionDescription = sessionDescription.description;
             kurentoRoomAPI.sendPublishVideo(sessionDescription.description, false, publishVideoRequestId);
             sendSocketParameter(mSessionDescription);
             MainActivity.getKurentoRoomAPIInstance().sendPublishVideo(sessionDescription.description, false, publishVideoRequestId);
 
         } else { // Asking for remote user video
-            Log.d(SDP, "onLocalSdpOfferGenerated in else" + sessionDescription.description);
+            Log.d(SDP, "onLocalSdpOfferGenerated in else " + sessionDescription.description);
             mSessionDescription = sessionDescription.description;
             publishVideoRequestId = ++Constants.id;
             sendSocketParameter(mSessionDescription);
             String username = nbmPeerConnection.getConnectionId();
-            videoRequestUserMapping.put(publishVideoRequestId, username);
+            videoRequestUserMapping.put(publishVideoRequestId, spCallingName);
             MainActivity.getKurentoRoomAPIInstance().sendReceiveVideoFrom(username, "webcam", sessionDescription.description, publishVideoRequestId);
         }
     }
 
     @Override
     public void onLocalSdpAnswerGenerated(SessionDescription sessionDescription, NBMPeerConnection nbmPeerConnection) {
-        Log.d(TESTCALL,"111");
-        Log.d(SDP, "onLocalSdpAnswerGenerated" + sessionDescription.description);
-        Log.d(RECONNECT, "reconnecting " + "onLocalSdpAnswerGenerated");
+        Log.d(TAG, "onLocalSdpAnswerGenerated" + sessionDescription.description);
     }
 
     @Override
     public void onIceCandidate(IceCandidate iceCandidate, NBMPeerConnection nbmPeerConnection) {
-        Log.d(TESTCALL,"09");
-        Log.d(RECONNECT, "onIceCandidate func" + iceCandidate);
+        Log.d(TAG,"onIceCandidate");
         int sendIceCandidateRequestId = ++Constants.id;
         sendOnIceCandidate(iceCandidate.sdp);
 
         if (callState == CallState.PUBLISHING || callState == CallState.PUBLISHED){
-            kurentoRoomAPI.sendOnIceCandidate(this.username, iceCandidate.sdp,
+            kurentoRoomAPI.sendOnIceCandidate(this.spCallingName, iceCandidate.sdp,
                     iceCandidate.sdpMid, Integer.toString(iceCandidate.sdpMLineIndex), 12);
         } else {
             kurentoRoomAPI.sendOnIceCandidate(nbmPeerConnection.getConnectionId(), iceCandidate.sdp,
@@ -405,9 +443,7 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
 
     @Override
     public void onIceStatusChanged(PeerConnection.IceConnectionState iceConnectionState, NBMPeerConnection nbmPeerConnection) {
-        Log.d(TESTCALL,"14");
-        Log.i("iceconnectionstate", "iceConnectionState " + iceConnectionState);
-        Log.i(RECONNECT, "iceConnectionState " + nbmPeerConnection);
+        Log.d(TAG,"onIceStatusChanged");
 
         switch (iceConnectionState){
             case CONNECTED:
@@ -436,9 +472,10 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
 
     @Override
     public void onRemoteStreamAdded(MediaStream mediaStream, NBMPeerConnection nbmPeerConnection) {
-        Log.d(TESTCALL,"16");
-        Log.i(RECONNECT, "onRemoteStreamAdded");
+        Log.i(TAG, "onRemoteStreamAdded");
         nbmWebRTCPeer.setActiveMasterStream(mediaStream);
+        nbmWebRTCPeer.attachRendererToRemoteStream(masterView, mediaStream);
+
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -449,15 +486,13 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
 
     @Override
     public void onRemoteStreamRemoved(MediaStream mediaStream, NBMPeerConnection nbmPeerConnection) {
-        Log.d(TESTCALL,"546");
-        Log.i(CONNECTSERVER, "onRemoteStreamRemoved");
+        Log.i(TAG, "onRemoteStreamRemoved");
+
     }
 
     @Override
     public void onPeerConnectionError(String s) {
-        Log.d(TESTCALL,"DSF");
-
-        Log.e(RECONNECT, "onPeerConnectionError:" + s);
+        Log.e(TAG, "onPeerConnectionError:" + s);
     }
 
     @Override
@@ -485,9 +520,8 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
 
     @Override
     public void onStateChange(NBMPeerConnection connection, DataChannel channel) {
-        Log.d(TESTCALL,"11cxc");
-        Log.i(TAG, "[datachannel] DataChannel onStateChange: " + channel.state());
-        Log.i(RECONNECT, "onRemoteStreamAdded");
+        Log.i(TAG, "onStateChange " + channel.state());
+
         if (channel.state() == DataChannel.State.OPEN) {
             sendHelloMessage(channel);
             Log.i(TAG, "[datachannel] Datachannel open, sending first hello");
@@ -504,7 +538,7 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
     private Runnable offerWhenReady = new Runnable() {
         @Override
         public void run() {
-            Log.d(TESTCALL,"11");
+            Log.d(TAG,"offerWhenReady");
             // Generate offers to receive video from all peers in the room
             for (Map.Entry<String, Boolean> entry : MainActivity.userPublishList.entrySet()) {
                 if (entry.getValue()) {
@@ -520,7 +554,7 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
 
     @Override
     public void onRoomResponse(RoomResponse response) {
-        Log.d(TESTCALL,"11aqwe");
+        Log.d(TAG,"onRoomResponse");
         int requestId =response.getId();
 
         if (requestId == publishVideoRequestId){
@@ -579,30 +613,29 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
 
     @Override
     public void onRoomConnected() {
-        Log.i(RECONNECT, "onRemoteStreamAdded");
-        Log.d(TESTCALL,"'SDAL';LWA'");
+        Log.i(TAG, "onRoomConnected");
     }
 
     @Override
     public void onRoomDisconnected() {
-        Log.i(RECONNECT, "onRemoteStreamAdded");
-        Log.d(TESTCALL,"123123");
+        Log.i(TAG, "onRoomDisconnected");
     }
 
     public void sendSocketParameter(String sessionDescription){
         String id = "call";
-        String channel = "ONEMOBILE";
+        String dataChannel = "ONEMOBILE";
 
         try {
             JSONObject obj = new JSONObject();
             obj.put("id", id);
+            obj.put("channel", dataChannel);
+            obj.put("channelType", dataChannel);
             obj.put("customerId", spCallingName);
-            obj.put("channel", channel);
             obj.put("token", spToken);
             obj.put("sdpOffer", sessionDescription);
-            obj.put("maxBandwidth", 700);
+            obj.put("maxBandwidth", 0);
 
-            Log.d("JSONException", "exception " + obj.toString());
+            Log.d("CHECKMYID", "exception " + obj.toString());
 
             socketIO.emit("message", obj.toString());
 
@@ -623,59 +656,13 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
     }
 
     public void connectServer(){
-        SSLContext mSslContext = null;
+        OkHttpClient oke = RetrofitClient.UnsafeOkHttpClient.getUnsafeOkHttpClient();
 
-        HostnameVerifier hostnameVerifier = new HostnameVerifier() {
-            @Override
-            public boolean verify(String s, SSLSession sslSession) {
-                HostnameVerifier hostnameVerifier1 = HttpsURLConnection.getDefaultHostnameVerifier();
-                return hostnameVerifier1.verify(s, sslSession);
-            }
-        };
-
-        TrustManager[] trustAllCertificates = new TrustManager[]{ new X509TrustManager() {
-            @Override
-            public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
-
-                Log.d(CONNECTSERVER, "checkClientTrusted " + x509Certificates.toString() + s);
-            }
-
-            @Override
-            public void checkServerTrusted(X509Certificate[] x509Certificates, String s){
-                Log.d(CONNECTSERVER, "checkServerTrusted " + x509Certificates.toString() + " , " + s);
-            }
-
-            @Override
-            public X509Certificate[] getAcceptedIssuers() {
-                return new X509Certificate[0];
-            }
-        }};
-
-        X509TrustManager trustManager = (X509TrustManager) trustAllCertificates[0];
-
-
-        try {
-            mSslContext = SSLContext.getInstance("TLS");
-            try {
-                mSslContext.init(null, trustAllCertificates, null);
-            } catch (KeyManagementException e) {
-                e.printStackTrace();
-            }
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
-
-        OkHttpClient okHttpClient = new OkHttpClient.Builder()
-                .hostnameVerifier(hostnameVerifier)
-                .retryOnConnectionFailure(true)
-                .sslSocketFactory(mSslContext.getSocketFactory(), trustManager)
-                .build();
-
-        IO.setDefaultOkHttpWebSocketFactory(okHttpClient);
-        IO.setDefaultOkHttpCallFactory(okHttpClient);
+        IO.setDefaultOkHttpWebSocketFactory(oke);
+        IO.setDefaultOkHttpCallFactory(oke);
 
         IO.Options options = new IO.Options();
-        options.callFactory = okHttpClient;
+        options.callFactory = oke;
         options.reconnection = true;
 //        options.transports = new String[]{WebSocket.NAME};
         options.secure = true;
@@ -683,7 +670,7 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
         options.path = "/native";
 
         try {
-            socketIO = IO.socket("http://" + Constants.SOCKET_ADDRESS_HTTPS, options);
+            socketIO = IO.socket("https://" + Constants.SOCKET_ADDRESS_HTTPS, options);
             socketIO.on(Socket.EVENT_CONNECT, new Emitter.Listener() {
                 @Override
                 public void call(Object... args) {
@@ -716,6 +703,8 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
                         JsonObject jsonObject = new JsonParser().parse(data).getAsJsonObject();
                         String theId = jsonObject.get("id").getAsString();
 
+                        Log.d("CHECKMYID", theId);
+
                         switch (theId){
                             case "registerResponse":
                                 Log.d(CONNECTSERVER, "registerResponse");
@@ -723,6 +712,13 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
                             case "waitingQueue":
                                 Log.d(CONNECTSERVER, "waitingQueue");
                                 showLoading();
+                                break;
+                            case "reject":
+                                String message = jsonObject.get("response").getAsString();
+                                stopVideoBundle();
+                                Toast.makeText(ActivityVideoChat.this, message, Toast.LENGTH_SHORT).show();
+                                Intent intent1 = new Intent(ActivityVideoChat.this, MainActivity.class);
+                                startActivity(intent1);
                                 break;
                             case "iceCandidateCustomer":
                                 Log.d(CONNECTSERVER, "iceCandidateCustomer");
@@ -733,21 +729,33 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
 
                                 IceCandidate iceCandidate = new IceCandidate(getSdpMid, getSdpMidLineIndex, getSdp);
                                 Log.d(RECONNECT, iceCandidate.toString());
-                                nbmWebRTCPeer.addRemoteIceCandidate(iceCandidate, "local");
+                                if (nbmWebRTCPeer !=null){
+                                    nbmWebRTCPeer.addRemoteIceCandidate(iceCandidate, "local");
+                                }
                                 break;
                             case "callResponse":
                                 Log.d(CONNECTSERVER, "callResponse");
                                 String getResponse = jsonObject.get("response").getAsString();
                                 String sdpAnswer = jsonObject.get("sdpAnswer").getAsString();
+                                Log.d("========", "getResponse " + getResponse);
+                                Log.d("========", "getResponse 2" + jsonObject);
 
                                 SessionDescription sd = new SessionDescription(SessionDescription.Type.ANSWER, sdpAnswer );
-                                nbmWebRTCPeer.processAnswer(sd, "local");
-                                PeerConnectionFactory.initializeAndroidGlobals(ActivityVideoChat.this, true,true,true);
-                                PeerConnectionFactory peerConnectionFactory = new PeerConnectionFactory();
-                                peerConnectionFactory.setVideoHwAccelerationOptions(rootEglBase.getEglBaseContext(), rootEglBase.getEglBaseContext());
+                                if (nbmWebRTCPeer != null){
+
+                                    nbmWebRTCPeer.processAnswer(sd, "local");
+                                }
+
+
+                                    getVideoCapturer();
+//                                PeerConnectionFactory peerConnectionFactory = new PeerConnectionFactory();
+//                                PeerConnectionFactory.initializeAndroidGlobals(nbmPeerConnectionParameters, true,true,false);
+//                                peerConnectionFactory.createVideoSource(getVideoCapturer(), myMediaConstraint());
+//                                peerConnectionFactory.setVideoHwAccelerationOptions(rootEglBase.getEglBaseContext(), rootEglBase.getEglBaseContext());
                                 break;
                             case "stopByAgent":
                                 Log.d(CONNECTSERVER, "stopByAgent");
+                                stopVideoBundle();
                                 Toast.makeText(ActivityVideoChat.this, "Stop Calling", Toast.LENGTH_SHORT).show();
                                 Intent intent = new Intent(ActivityVideoChat.this, MainActivity.class);
                                 startActivity(intent);
@@ -791,7 +799,7 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
                 try {
                     JSONObject reconnectObj = new JSONObject();
                     reconnectObj.put("id", "re-register");
-                    reconnectObj.put("customerId", customerId);
+                    reconnectObj.put("customerId", spCallingName);
 
                     Log.d(RECONNECT, reconnectObj.toString());
                     socketIO.emit("message", reconnectObj.toString());
@@ -1018,4 +1026,158 @@ public class ActivityVideoChat extends AppCompatActivity implements NBMWebRTCPee
         });
 
     }
+
+    private void audioButton(){
+
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        audioManager.setSpeakerphoneOn(true);
+        audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+
+        audio_button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (speakerOn){
+                    speakerOn = false;
+//                    toggleSpeakerHeadset.setImageResource(R.drawable.speaker);
+                    audioManager.setSpeakerphoneOn(false);
+                    audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                } else {
+                    speakerOn = true;
+//                    toggleSpeakerHeadset.setImageResource(R.drawable.headset);
+                    audioManager.setSpeakerphoneOn(true);
+                    audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                }
+            }
+        });
+    }
+
+    private NBMMediaConfiguration.NBMVideoCodec checkVideoFormat(String type){
+        Log.d("TEST_VIDEO_CODEC", "ini type " + type);
+        if (type.equals("VP8")){
+            seek = NBMMediaConfiguration.NBMVideoCodec.VP8;
+        } else if (type.equals("VP9")){
+            seek = NBMMediaConfiguration.NBMVideoCodec.VP9;
+        } else if (type.equals("H264")){
+            seek = NBMMediaConfiguration.NBMVideoCodec.H264;
+        }
+        Log.d("seek itu adalah", "seel " + seek);
+        return seek;
+    }
+
+    private int setBandwidth(int speedBandwidth){
+        int supido = 0;
+        if (speedBandwidth > 200 && speedBandwidth < 400) {
+//            bandHeight = 480;
+            bandHeight = (int) (((double) bandWidth) / 0.75d);
+            bandWidth = 640;
+            supido = 480;
+        } else if (speedBandwidth > 400 && speedBandwidth < 600){
+//            bandHeight = 480;
+            bandHeight = (int) (((double) bandWidth) / 0.75d);
+            bandWidth = 640;
+            supido = 480;
+        } else if (speedBandwidth > 600 && speedBandwidth < 700) {
+//            bandHeight = 720;
+            bandHeight = (int) (((double) bandWidth) / 0.75d);
+            bandWidth = 1280;
+            supido = 720;
+        } else if (speedBandwidth > 700) {
+//            bandHeight = 720;
+            bandHeight = (int) (((double) bandWidth) / 0.75d);
+            bandWidth = 1280;
+            supido = 720;
+        }
+
+        runUiOnThread(supido);
+        return supido;
+    }
+
+    private void runUiOnThread(final int supido){
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                tv_resolution.setText(supido + "p");
+                tv_resolution.setTextColor(getResources().getColor(R.color.whiteColor));
+            }
+        });
+    }
+
+    private VideoCapturer getVideoCapturer() {
+        String[] cameraFacing = {"front", "back"};
+        int[] cameraIndex = {0, 1};
+        int[] cameraOrientation = {0, 90, 180, 270};
+        for (String facing : cameraFacing) {
+            for (int index : cameraIndex) {
+                for (int orientation : cameraOrientation) {
+                    String name = "Camera " + index + ", Facing " + facing +
+                            ", Orientation " + orientation;
+                    VideoCapturer capturer = VideoCapturer.create(name);
+                    if (capturer != null) {
+                        return capturer;
+                    }
+                }
+            }
+        }
+        throw new RuntimeException("Failed to open capturer");
+    }
+
+    private MediaConstraints myMediaConstraint(){
+        MediaConstraints myNem = new MediaConstraints();
+
+        myNem.mandatory.add(new MediaConstraints.KeyValuePair("maxHeight", Integer.toString(bandHeight)));
+        myNem.mandatory.add(new MediaConstraints.KeyValuePair("maxWidth", Integer.toString(bandWidth)));
+        myNem.mandatory.add(new MediaConstraints.KeyValuePair("maxFrameRate", Integer.toString(500)));
+        myNem.mandatory.add(new MediaConstraints.KeyValuePair("minFrameRate", Integer.toString(0)));
+        return myNem;
+    }
+
 }
+
+
+//SSLContext mSslContext = null;
+//
+//        HostnameVerifier hostnameVerifier = new HostnameVerifier() {
+//            @Override
+//            public boolean verify(String s, SSLSession sslSession) {
+//                HostnameVerifier hostnameVerifier1 = HttpsURLConnection.getDefaultHostnameVerifier();
+//                return hostnameVerifier1.verify(s, sslSession);
+//            }
+//        };
+//
+//        TrustManager[] trustAllCertificates = new TrustManager[]{ new X509TrustManager() {
+//            @Override
+//            public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
+//
+//                Log.d(CONNECTSERVER, "checkClientTrusted " + x509Certificates.toString() + s);
+//            }
+//
+//            @Override
+//            public void checkServerTrusted(X509Certificate[] x509Certificates, String s){
+//                Log.d(CONNECTSERVER, "checkServerTrusted " + x509Certificates.toString() + " , " + s);
+//            }
+//
+//            @Override
+//            public X509Certificate[] getAcceptedIssuers() {
+//                return new X509Certificate[0];
+//            }
+//        }};
+//
+//        X509TrustManager trustManager = (X509TrustManager) trustAllCertificates[0];
+//
+//
+//        try {
+//            mSslContext = SSLContext.getInstance("TLS");
+//            try {
+//                mSslContext.init(null, trustAllCertificates, null);
+//            } catch (KeyManagementException e) {
+//                e.printStackTrace();
+//            }
+//        } catch (NoSuchAlgorithmException e) {
+//            e.printStackTrace();
+//        }
+//
+//        OkHttpClient okHttpClient = new OkHttpClient.Builder()
+//                .hostnameVerifier(hostnameVerifier)
+//                .retryOnConnectionFailure(true)
+//                .sslSocketFactory(mSslContext.getSocketFactory(), trustManager)
+//                .build();

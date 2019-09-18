@@ -11,6 +11,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.callvideo.model.LoginResponse;
@@ -18,23 +19,6 @@ import com.example.callvideo.networking.OcbcNispService;
 import com.example.callvideo.networking.RetrofitClient;
 import com.example.callvideo.networking.UtilsApi;
 import com.example.callvideo.util.Constants;
-
-import java.io.BufferedInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.security.KeyStore;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509Certificate;
-
-import javax.net.ssl.HostnameVerifier;
-import javax.net.ssl.HttpsURLConnection;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.TrustManagerFactory;
-
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -49,6 +33,7 @@ public class LoginActivity extends AppCompatActivity {
     private SharedPreferences myPreferences;
     private SharedPreferences.Editor editor;
     private ProgressBar login_progress;
+    private TextView version_name;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,6 +47,9 @@ public class LoginActivity extends AppCompatActivity {
         et_password = findViewById(R.id.et_password);
         et_callingName = findViewById(R.id.calling_name);
         login_progress = findViewById(R.id.login_progress);
+        version_name = findViewById(R.id.version_code);
+
+        versionCode();
 
         bt_login.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -79,6 +67,13 @@ public class LoginActivity extends AppCompatActivity {
         ocbcNispService = UtilsApi.getAPIService();
     }
 
+    private void versionCode() {
+        int versionCode = BuildConfig.VERSION_CODE;
+        String versionName = BuildConfig.VERSION_NAME;
+
+        version_name.setText(versionName);
+    }
+
     private void requestLogin(final String name, String password, final String callingName){
         Call<LoginResponse> call = ocbcNispService.postLogin(name, password);
         call.enqueue(new Callback<LoginResponse>() {
@@ -87,12 +82,10 @@ public class LoginActivity extends AppCompatActivity {
                 login_progress.setVisibility(View.GONE);
                         LoginResponse loginResponse = response.body();
                     if (response.isSuccessful()){
-                        Log.d("TOKEN_LOGIN", "" + loginResponse.getSuccess());
                         if (loginResponse.getSuccess())
                         {
                             Toast.makeText(LoginActivity.this, loginResponse.getMessage(), Toast.LENGTH_SHORT).show();
 
-                                Log.d("TOKEN_LOGIN", "token login " + loginResponse.getToken());
                                 Intent intent = new Intent(LoginActivity.this, MainActivity.class);
                                 intent.putExtra(Constants.LOGINN_TOKEN, loginResponse.getToken());
                                 intent.putExtra(Constants.MY_NAME, name);
@@ -111,7 +104,6 @@ public class LoginActivity extends AppCompatActivity {
 
             @Override
             public void onFailure(Call<LoginResponse> call, Throwable t) {
-                Log.d("TOKEN_LOGIN", "token login calling failed " + t);
                 Toast.makeText(LoginActivity.this, "Cannot Login", Toast.LENGTH_SHORT).show();
                 login_progress.setVisibility(View.GONE);
             }

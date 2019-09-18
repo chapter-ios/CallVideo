@@ -60,4 +60,9 @@
 
     <string name="success_reconnecting_title">Yeah!</string>
     <string name="success_reconnecting_text">You have succesfully connected</string>
+
+    <string-array name="video_codec_type">
+        <item>VP8</item>
+        <item>VP9</item>
+    </string-array>
 </resources>

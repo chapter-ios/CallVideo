@@ -11,7 +11,13 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.graphics.Camera;
 import android.graphics.Point;
+import android.graphics.SurfaceTexture;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
@@ -36,10 +42,13 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.example.callvideo.model.LoginResponse;
+import com.example.callvideo.networking.OcbcNispService;
+import com.example.callvideo.networking.UtilsApi;
 import com.example.callvideo.util.Constants;
 import com.facebook.network.connectionclass.ConnectionClassManager;
 import com.facebook.network.connectionclass.ConnectionQuality;
@@ -67,6 +76,7 @@ import fi.vtt.nubomedia.kurentoroomclientandroid.RoomListener;
 import fi.vtt.nubomedia.kurentoroomclientandroid.RoomNotification;
 import fi.vtt.nubomedia.kurentoroomclientandroid.RoomResponse;
 import fi.vtt.nubomedia.utilitiesandroid.LooperExecutor;
+
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.Headers;
@@ -112,13 +122,18 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
     private String userName, myName;
     private TextureView textureView;
     private Button btn_call;
-    private TextView tv_low_connection;
+    private TextView tv_low_connection, count_kbps;
     private ImageView iv_low_connection, signal_indicator;
     private SpeedDownload speedDownload;
     private ProgressBar loading_calling;
     private SharedPreferences myPreferences;
     private SharedPreferences.Editor editor;
-
+    private Spinner spinner_video;
+    private boolean backPressed = false;
+    private Thread  backPressedThread = null;
+    private int speedLimit = 250;
+    private OcbcNispService ocbcNispService;
+    private boolean buttonClicked;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -126,18 +141,22 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
         setContentView(R.layout.activity_main);
 
         this.mUsernameTV = (TextView) findViewById(R.id.main_username);
-        this.mTextMessageTV = (TextView) findViewById(R.id.message_textview);
+//        this.mTextMessageTV = (TextView) findViewById(R.id.message_textview);
         this.mTextMessageET = (EditText) findViewById(R.id.main_text_message);
+
+        ocbcNispService = UtilsApi.getAPIService();
 
         iv_low_connection = findViewById(R.id.iv_low_signal);
         tv_low_connection = findViewById(R.id.tv_low_signal);
         signal_indicator = findViewById(R.id.signal_indicator);
         loading_calling = findViewById(R.id.loading_calling);
+        spinner_video = findViewById(R.id.spinner_video);
+        count_kbps = findViewById(R.id.count_kbps);
 
         textureView = findViewById(R.id.view_finder);
         btn_call = findViewById(R.id.btn_call);
 
-        this.mTextMessageTV.setText("");
+//        this.mTextMessageTV.setText("");
         executor = new LooperExecutor();
         executor.requestStart();
         SharedPreferences mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(getBaseContext());
@@ -192,9 +211,60 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
 
         IntentFilter intentFilter = new IntentFilter(WifiManager.WIFI_STATE_CHANGED_ACTION);
         registerReceiver(wifiStateReceiver, intentFilter);
+        try {
+            cameraResolution();
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (!this.backPressed){
+            this.backPressed = true;
+            Toast.makeText(this,"Press back again to exit.", Toast.LENGTH_SHORT).show();
+            this.backPressedThread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        Thread.sleep(1000);
+                        backPressed = false;
+                    } catch (InterruptedException e){ Log.d("VCA-oBP","Successfully interrupted"); }
+                }
+            });
+            this.backPressedThread.start();
+        }
+        // If button pressed the second time then call super back pressed
+        // (eventually calls onDestroy)
+        else {
+            Intent a = new Intent(Intent.ACTION_MAIN);
+            a.addCategory(Intent.CATEGORY_HOME);
+            a.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(a);
+        }
+    }
+
+    private void timedButton(){
+
     }
 
     public void makeCall(){
+        btn_call.setEnabled(false);
+        Toast.makeText(MainActivity.this, "Preparing Your Call", Toast.LENGTH_LONG).show();
+        Timer btn_timer = new Timer();
+        TimerTask timerTask = new TimerTask() {
+            @Override
+            public void run() {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        btn_call.setEnabled(true);
+                    }
+                });
+            }
+        };
+        btn_timer.schedule(timerTask, 5000);
+
         btn_call.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -209,18 +279,18 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
                             }
                         });
 
-                        Log.d("speedConnection", " spoeed " + speed);
-                        if (speed < 100) {
-                            Log.d("speedConnection", " spoeed low");
+                        if (speed < speedLimit) {
                             Intent intent = new Intent(MainActivity.this, PoorConnectionActivity.class);
                             startActivity(intent);
 
                         } else {
-                            Log.d("speedConnection", " spoeed high");
                             Intent intent = new Intent(MainActivity.this, ActivityVideoChat.class);
                             intent.putExtra(Constants.CALLING_NAME, username);
                             intent.putExtra(Constants.MY_NAME, myName);
                             intent.putExtra(Constants.LOGINN_TOKEN, token);
+                            intent.putExtra(Constants.SPEED_CON, speed);
+                            intent.putExtra("video_codec",spinner_video.getSelectedItem().toString());
+
                             startActivity(intent);
                         }
                     }
@@ -255,6 +325,7 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
     @Override
     public void onStop() {
         super.onStop();
+        moveTaskToBack(false);
         Log.i(TAG, "onStop");
 //        unregisterReceiver(wifiStateReceiver);
     }
@@ -316,6 +387,7 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
                 .withPermissions(
                         Manifest.permission.CALL_PHONE,
                         Manifest.permission.CAMERA,
+                        Manifest.permission.ANSWER_PHONE_CALLS,
                         Manifest.permission.READ_EXTERNAL_STORAGE,
                         Manifest.permission.WRITE_EXTERNAL_STORAGE,
                         Manifest.permission.RECORD_AUDIO
@@ -498,30 +570,35 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
         }
     };
 
-//    private void cameraResolution(){
-//        Point displaySize = new Point();
-//        getWindowManager().getDefaultDisplay().getRealSize(displaySize);
-//
-//        DisplayMetrics metrics = new DisplayMetrics();
-//
-//        Display display = getWindowManager().getDefaultDisplay();
-//        Point size = new Point();
-//        display.getSize(size);
-//        int width = size.x;
-//        int height = size.y;
-//
-//        Rational aspectRatio = new Rational(textureView.getWidth(), textureView.getHeight());
-//        Size screen = new Size(textureView.getWidth(), textureView.getHeight()); //size of the screen
-//
-//        Log.d("check camera nya", "checkcamera " + width + " dan " + height);
-//
-//        PreviewConfig pConfig = new PreviewConfig.Builder().setTargetAspectRatio(aspectRatio).setTargetResolution(screen).build();
-//        Preview preview = new Preview(pConfig);
-//        ImageCaptureConfig imageCaptureConfig = new ImageCaptureConfig.Builder().setCaptureMode(ImageCapture.CaptureMode.MIN_LATENCY)
-//                .setTargetRotation(getWindowManager().getDefaultDisplay().getRotation()).build();
-//        final ImageCapture imgCap = new ImageCapture(imageCaptureConfig);
-//
-//    }
+    private void cameraResolution() throws CameraAccessException {
+
+        String cameraId ;
+        CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        cameraId = cameraManager.getCameraIdList()[0];
+        CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
+        StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        assert map != null;
+
+        for (Size size : map.getOutputSizes(SurfaceTexture.class)) {
+            Log.i("inilah camera hahaha  ", "imageDimension " + size);
+        }
+
+        Point displaySize = new Point();
+        getWindowManager().getDefaultDisplay().getRealSize(displaySize);
+
+        DisplayMetrics metrics = new DisplayMetrics();
+
+        Display display = getWindowManager().getDefaultDisplay();
+        Point size = new Point();
+        display.getSize(size);
+        int width = size.x;
+        int height = size.y;
+
+        Rational aspectRatio = new Rational(textureView.getWidth(), textureView.getHeight());
+        Size screen = new Size(textureView.getWidth(), textureView.getHeight()); //size of the screen
+
+        Log.d("check camera nya", "checkcamera " + width + " dan " + height);
+    }
 
     @TargetApi(Build.VERSION_CODES.M)
     private int checkConnection(){
@@ -540,9 +617,11 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    iv_low_connection.setVisibility(View.VISIBLE);
-                    tv_low_connection.setVisibility(View.VISIBLE);
+//                    iv_low_connection.setVisibility(View.VISIBLE);
+//                    tv_low_connection.setVisibility(View.VISIBLE);
                     signal_indicator.setImageResource(R.drawable.poor_connection);
+                    count_kbps.setText("0 kbps");
+                    count_kbps.setTextColor(getResources().getColor(R.color.redDefault));
                 }
             });
 
@@ -638,8 +717,11 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
     }
 
     private int checkKbps(final SpeedDownload speedDownload){
+
         Request request = new Request.Builder()
                 .url("http://139.180.134.73/img/250K.txt")
+//                .url("https://f2f.ocbcnisp.com/ATTiny13.pdf")
+//                .url("http://139.180.134.73/download.pdf")
                 .build();
 
         startTime = System.currentTimeMillis();
@@ -678,8 +760,8 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
 
                 double timeTakenMills = Math.floor(endTime - startTime);  // time taken in milliseconds
                 double timeTakenSecs = timeTakenMills / 1000;  // divide by 1000 to get time in seconds
-                divideKbps = (int) Math.round(1024 / timeTakenSecs);
-
+                divideKbps = (int) Math.round((fileSize / timeTakenSecs) / 1000);
+                Log.d("checkKbps", "file size " + fileSize / 1000);
                 speedDownload.onSuccess(divideKbps);
                 if(divideKbps <= POOR_BANDWIDTH){
                     // slow connection
@@ -695,7 +777,7 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
 
         private void setTimedHandler(){
         int begin = 0;
-        int timeInterval = 5000;
+        int timeInterval = 10000;
         final Timer timer = new Timer();
 
         TimerTask timerTask = new TimerTask() {
@@ -704,19 +786,23 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
                 checkKbps(new SpeedDownload() {
                     @Override
                     public void onSuccess(final int speed) {
-                        Log.d("munculkanspeed", "speed " + speed);
+//                        Log.d("munculkanspeed", "speed " + speed);
 
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                if (speed < 100){
-                                    iv_low_connection.setVisibility(View.VISIBLE);
-                                    tv_low_connection.setVisibility(View.VISIBLE);
+                                if (speed < speedLimit){
+//                                    iv_low_connection.setVisibility(View.VISIBLE);
+//                                    tv_low_connection.setVisibility(View.VISIBLE);
                                     signal_indicator.setImageResource(R.drawable.poor_connection);
+                                    count_kbps.setText(speed + " kbps");
+                                    count_kbps.setTextColor(getResources().getColor(R.color.redDefault));
                                 } else {
-                                    iv_low_connection.setVisibility(View.GONE);
-                                    tv_low_connection.setVisibility(View.GONE);
+//                                    iv_low_connection.setVisibility(View.GONE);
+//                                    tv_low_connection.setVisibility(View.GONE);
                                     signal_indicator.setImageResource(R.drawable.good_connection);
+                                    count_kbps.setText(speed + " kbps");
+                                    count_kbps.setTextColor(getResources().getColor(R.color.greenColor));
                                 }
                             }
                         });
@@ -728,9 +814,11 @@ public class MainActivity extends AppCompatActivity implements RoomListener {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                iv_low_connection.setVisibility(View.VISIBLE);
-                                tv_low_connection.setVisibility(View.VISIBLE);
+//                                iv_low_connection.setVisibility(View.VISIBLE);
+//                                tv_low_connection.setVisibility(View.VISIBLE);
                                 signal_indicator.setImageResource(R.drawable.poor_connection);
+                                count_kbps.setText(0 + " kbps");
+                                count_kbps.setTextColor(getResources().getColor(R.color.redDefault));
                             }
                         });
                     }
